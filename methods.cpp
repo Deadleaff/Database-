@@ -392,12 +392,10 @@ Student* GroupHashTable::findStudentByRating(double rating) {
 }
 
 
-Student* GroupHashTable::findStudentByRating_Group(int num, double rating) {
-    if (groups[num] != NULL) {
-        Student* s = groups[num]->findStudentByRating(rating);
-        if (s != NULL) {
-            return s;
-        }
+Student* GroupHashTable::findStudentByRating_group(double rating, int group) {
+    if (groups[group] != NULL) {
+        Student* s = groups[group]->findStudentByRating(rating);
+        if (s != NULL) return s;
     }
     return NULL;
 }
@@ -566,5 +564,7 @@ Student* DataManager::findStudentByName_group(const std::string& name, int group
 }
 
 Student* DataManager::findStudentByRating_group(double rating, int group) {
-    return listTable.findStudentByRating_Group(group, rating);
+    return listTable.findStudentByRating_group(rating, group);
+
 }
+

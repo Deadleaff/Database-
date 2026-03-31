@@ -85,7 +85,6 @@ public:
 };
 
 // ========== ХЭШ-ТАБЛИЦА ДЛЯ СПИСКОВ ==========
-void DeleteFromHeap(
 
 class GroupHashTable {
 private:
@@ -96,7 +95,7 @@ public:
     GroupList* get_or_create_list(int num);                         // получить или создать
     GroupList* get_list(int num);                                   // получить существующую
     Student* findStudentByRating(double rating);                    // поиск студента по рейтингу
-    Student* findStudentByRating_Group(int num, double rating);     // поиск в группе по рейтингу
+    Student* findStudentByRating_group(double rating, int group);     // поиск в группе по рейтингу
     ~GroupHashTable();                                              // деструктор
 };
 

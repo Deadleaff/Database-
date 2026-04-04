@@ -3,7 +3,7 @@
 int main () {
     GroupHashTable list_table;
     TreeHashTable tree_table;
-    Student* a = nullptr;
+    Student* a;
     Student* s = nullptr;
     try {
         
@@ -12,15 +12,17 @@ int main () {
         dm.load("dbfile.txt");
 
         a = dm.findStudentByRating(4.5);
+        dm.deleteStudent("Pavel Ivanov");
 
-        s = dm.findStudentByName_group ("Pavel Ivanov", 510);
+
+        s = dm.findStudentByName_group ("Pavel Ivanov", 210);
     }
     catch (const std::exception& e) {
         std::cerr << "Ошибка: " << e.what() << "\n";
         return 1;
     }
         
-    std::cout << s->rating << "\n";
+    std::cout << a->rating << "\n";
     return 0;
 }
 

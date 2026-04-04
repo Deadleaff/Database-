@@ -228,16 +228,15 @@ void BTreeNode::merge(int idx) {
     keys.erase(keys.begin() + idx);
     children.erase(children.begin() + idx + 1);
     
-    delete sibling;
 }
 
 BTreeNode::~BTreeNode() {
-    for (size_t i = 0; i < keys.size(); i++) {
+/*    for (size_t i = 0; i < keys.size(); i++) {
         delete keys[i];
     }
     for (size_t i = 0; i < children.size(); i++) {
         delete children[i];
-    }
+    }*/
 }
 
 // ========== РЕАЛИЗАЦИЯ BTree ==========
@@ -284,7 +283,7 @@ void BTree::remove(const std::string& name) {
         } else {
             root = root->children[0];
         }
-        delete tmp;
+       // delete tmp;
     }
 }
 
@@ -293,7 +292,7 @@ bool BTree::empty() {
 }
 
 BTree::~BTree() {
-    delete root;
+   // delete root;
 }
 
 // ========== РЕАЛИЗАЦИЯ GroupList ==========
@@ -560,7 +559,8 @@ Student* DataManager::findStudentByRating(double rating) {
 }
 
 Student* DataManager::findStudentByName_group(const std::string& name, int group) {
-    return treeTable.searchByName(group, name);
+    if(treeTable.searchByName(group, name) == NULL) {throw std::invalid_argument("Студент не найден"); return NULL; }
+    else return treeTable.searchByName(group, name);
 }
 
 Student* DataManager::findStudentByRating_group(double rating, int group) {

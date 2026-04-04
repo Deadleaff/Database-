@@ -56,26 +56,49 @@ void BTreeNode::insertNonFull(Student* student) {
         }
         children[i]->insertNonFull(student);
     }
+    
 }
 
 void BTreeNode::splitChild(int i, BTreeNode* y) {
+    // Создаем новый узел
     BTreeNode* z = new BTreeNode(y->t, y->leaf);
     
+    // СОХРАНЯЕМ средний ключ ДО изменения y
+    Student* middleKey = y->keys[t - 1];
+    
+    // 1. Копируем правую половину ключей из y в z
     for (int j = 0; j < t - 1; j++) {
         z->keys.push_back(y->keys[j + t]);
     }
     
+    // 2. Копируем правую половину детей из y в z (если не лист)
     if (!y->leaf) {
         for (int j = 0; j < t; j++) {
             z->children.push_back(y->children[j + t]);
         }
+    }
+    
+    // 3. Уменьшаем y (после копирования)
+    y->keys.resize(t - 1);
+    if (!y->leaf) {
         y->children.resize(t);
     }
     
-    y->keys.resize(t - 1);
+    // 4. Вставляем средний ключ в родителя (текущий узел)
+    //    БЕЗОПАСНАЯ вставка с проверкой границ
+    if (i <= (int)keys.size()) {
+        keys.insert(keys.begin() + i, middleKey);
+    } else {
+        keys.push_back(middleKey);
+    }
     
-    children.insert(children.begin() + i + 1, z);
-    keys.insert(keys.begin() + i, y->keys[t - 1]);
+    // 5. Вставляем нового ребенка z
+    //    БЕЗОПАСНАЯ вставка с проверкой границ
+    if (i + 1 <= (int)children.size()) {
+        children.insert(children.begin() + i + 1, z);
+    } else {
+        children.push_back(z);
+    }
 }
 
 Student* BTreeNode::search(const std::string& name) {
@@ -233,10 +256,10 @@ void BTreeNode::merge(int idx) {
 BTreeNode::~BTreeNode() {
 /*    for (size_t i = 0; i < keys.size(); i++) {
         delete keys[i];
-    }
+    }*/
     for (size_t i = 0; i < children.size(); i++) {
         delete children[i];
-    }*/
+    }
 }
 
 // ========== РЕАЛИЗАЦИЯ BTree ==========
@@ -292,7 +315,7 @@ bool BTree::empty() {
 }
 
 BTree::~BTree() {
-   // delete root;
+    delete root;
 }
 
 // ========== РЕАЛИЗАЦИЯ GroupList ==========

@@ -15,7 +15,6 @@ int main () {
         dm.deleteStudent("Pavel Ivanov");
 
 
-        s = dm.findStudentByName_group ("Pavel Ivanov", 210);
     }
     catch (const std::exception& e) {
         std::cerr << "Ошибка: " << e.what() << "\n";

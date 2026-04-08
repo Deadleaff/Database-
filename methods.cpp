@@ -591,3 +591,138 @@ Student* DataManager::findStudentByRating_group(double rating, int group) {
 
 }
 
+// ========== РЕАЛИЗАЦИЯ НОВЫХ МЕТОДОВ BTreeNode ==========
+
+void BTreeNode::searchBySubstring(const std::string& substr, std::vector<Student*>& results) {
+    // Проверяем все ключи в текущем узле
+    for (size_t i = 0; i < keys.size(); i++) {
+        if (keys[i]->name.find(substr) != std::string::npos) {
+            results.push_back(keys[i]);
+        }
+    }
+
+    // Рекурсивно обходим детей
+    if (!leaf) {
+        for (size_t i = 0; i < children.size(); i++) {
+            children[i]->searchBySubstring(substr, results);
+        }
+    }
+}
+
+// ========== РЕАЛИЗАЦИЯ НОВЫХ МЕТОДОВ BTree ==========
+
+std::vector<Student*> BTree::searchBySubstring(const std::string& substr) {
+    std::vector<Student*> results;
+    if (root != NULL) {
+        root->searchBySubstring(substr, results);
+    }
+    return results;
+}
+
+// ========== РЕАЛИЗАЦИЯ НОВЫХ МЕТОДОВ TreeHashTable ==========
+
+std::vector<Student*> TreeHashTable::searchBySubstringInGroup(int groupNum, const std::string& substr) {
+    std::vector<Student*> results;
+    BTree* tree = get_tree(groupNum);
+    if (tree != NULL) {
+        results = tree->searchBySubstring(substr);
+    }
+    return results;
+}
+
+bool TreeHashTable::deleteBySubstringFromGroup(int groupNum, const std::string& substr, GroupHashTable& listTable) {
+    // Находим всех студентов в группе, у которых в имени есть подстрока
+    std::vector<Student*> toDelete = searchBySubstringInGroup(groupNum, substr);
+
+    if (toDelete.empty()) {
+        return false;
+    }
+
+    // СОБИРАЕМ ИМЕНА ДО УДАЛЕНИЯ (пока указатели еще валидны)
+    std::vector<std::string> namesToDelete;
+    for (size_t i = 0; i < toDelete.size(); i++) {
+        namesToDelete.push_back(toDelete[i]->name);
+    }
+
+    // Получаем список группы для удаления (освобождения памяти)
+    GroupList* group = listTable.get_list(groupNum);
+
+    // Удаляем каждого найденного студента по имени
+    for (size_t i = 0; i < namesToDelete.size(); i++) {
+        // Удаляем из B-дерева
+        BTree* tree = get_tree(groupNum);
+        if (tree != NULL) {
+            tree->remove(namesToDelete[i]);
+        }
+
+        // Удаляем из списка (освобождает память)
+        if (group != NULL) {
+            group->deleteStudentByName(namesToDelete[i]);
+        }
+    }
+
+    return true;
+}
+
+// ========== РЕАЛИЗАЦИЯ НОВЫХ МЕТОДОВ DataManager ==========
+
+std::vector<Student*> DataManager::findStudentsBySubstringInGroup(const std::string& substr, int group) {
+    if (group < 0 || group >= 1000) {
+        throw std::out_of_range("Некорректный номер группы");
+    }
+    return treeTable.searchBySubstringInGroup(group, substr);
+}
+
+int DataManager::deleteStudentsBySubstringFromGroup(const std::string& substr, int group) {
+    if (group < 0 || group >= 1000) {
+        throw std::out_of_range("Некорректный номер группы");
+    }
+
+    // Находим всех студентов для удаления
+    std::vector<Student*> toDelete = treeTable.searchBySubstringInGroup(group, substr);
+    int count = toDelete.size();
+
+    if (count > 0) {
+        // Выполняем удаление
+        treeTable.deleteBySubstringFromGroup(group, substr, listTable);
+    }
+
+    return count;
+}
+
+// ========== РЕАЛИЗАЦИЯ НОВОГО МЕТОДА DataManager ==========
+
+void DataManager::rewriteFile(const std::string& filename) {
+    // Открываем файл для записи (это автоматически очистит его содержимое)
+    std::ofstream file(filename.c_str(), std::ios::trunc);
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Не удалось открыть файл для записи: " + filename);
+    }
+
+    // Проходим по всем группам
+    for (int i = 0; i < 1000; i++) {
+        GroupList* group = listTable.get_list(i);
+        if (group != NULL) {
+            // Получаем список студентов группы
+            std::list<Student*>& students = group->getStudents();
+
+            // Записываем каждого студента в файл, используя итераторы
+            for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
+                Student* s = *it;
+                file << s->name << ";" << s->group << ";" << s->rating << std::endl;
+            }
+        }
+    }
+
+    file.close();
+}
+
+void TreeHashTable::debug_print_tree(int groupNum) {
+    BTree* tree = get_tree(groupNum);
+    if (tree == NULL) {
+        std::cout << "Дерево для группы " << groupNum << " не существует" << std::endl;
+        return;
+    }
+    std::cout << "Дерево для группы " << groupNum << " существует" << std::endl;
+}

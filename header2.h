@@ -45,6 +45,7 @@ public:
     void fill(int idx);                                  // пополнение ребенка
     void borrowFromPrev(int idx);                        // заимствование у левого
     void borrowFromNext(int idx);                        // заимствование у правого
+    void searchBySubstring(const std::string& substr, std::vector<Student*>& results);
     void merge(int idx);                                 // объединение детей
     ~BTreeNode();                                         // деструктор
 };
@@ -59,6 +60,7 @@ public:
     void insert(Student* student);           // вставка студента
     Student* search(const std::string& name); // поиск по имени
     void remove(const std::string& name);    // удаление по имени
+    std::vector<Student*> searchBySubstring(const std::string& substr);
     bool empty();                            // проверка на пустоту
     ~BTree();                                 // деструктор
 };
@@ -111,7 +113,10 @@ public:
     BTree* get_tree(int num);                               // получить существующее
     Student* searchByName(int groupNum, const std::string& name);  // поиск по имени в группе
     Student* searchByNameAll(const std::string& name);              // поиск по имени во всех группах
+    std::vector<Student*> searchBySubstringInGroup(int groupNum, const std::string& substr);
+    bool deleteBySubstringFromGroup(int groupNum, const std::string& substr, GroupHashTable& listTable);
     bool delete_from_tree(int groupNum, const std::string& name);  // удалить из дерева
+    void debug_print_tree(int groupNum);
     ~TreeHashTable();                                       // деструктор
 };
 
@@ -131,6 +136,9 @@ public:
     Student* findStudentByRating(double rating);                 // найти студента по рейтингу (через список)
     Student* findStudentByName_group(const std::string& name, int group); // найти по имени и по группе
     Student* findStudentByRating_group(double rating, int group); // найти по рейтингу и по группе
+    std::vector<Student*> findStudentsBySubstringInGroup(const std::string& substr, int group);
+    int deleteStudentsBySubstringFromGroup(const std::string& substr, int group);   
+    void rewriteFile(const std::string& filename);  // Перезаписать файл текущими данными
 };
 
 #endif // HEADER1_H

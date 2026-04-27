@@ -24,6 +24,14 @@ bool Student::operator>(const Student& other) const {
     return name > other.name;
 }
 
+bool Student::operator>=(double r) {
+    return rating >= r;
+}
+
+bool Student::operator<=(double r) {
+    return rating <= r;
+}
+
 // ========== РЕАЛИЗАЦИЯ BTreeNode ==========
 
 BTreeNode::BTreeNode(int _t, bool _leaf) : t(_t), leaf(_leaf) {
@@ -383,13 +391,13 @@ GroupList::~GroupList() {
 // ========== РЕАЛИЗАЦИЯ GroupHashTable ==========
 
 GroupHashTable::GroupHashTable() {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         groups[i] = NULL;
     }
 }
 
 GroupList* GroupHashTable::get_or_create_list(int num) {
-    if (num < 0 || num >= 1000) return NULL;
+    if (num < 0 || num >= MAX_GROUP) return NULL;
     if (groups[num] == NULL) {
         groups[num] = new GroupList(num);
     }
@@ -397,12 +405,12 @@ GroupList* GroupHashTable::get_or_create_list(int num) {
 }
 
 GroupList* GroupHashTable::get_list(int num) {
-    if (num < 0 || num >= 1000) return NULL;
+    if (num < 0 || num >= MAX_GROUP) return NULL;
     return groups[num];
 }
 
 Student* GroupHashTable::findStudentByRating(double rating) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         if (groups[i] != NULL) {
             Student* s = groups[i]->findStudentByRating(rating);
             if (s != NULL) {
@@ -424,7 +432,7 @@ Student* GroupHashTable::findStudentByRating_group(double rating, int group) {
 
 
 GroupHashTable::~GroupHashTable() {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         delete groups[i];
     }
 }
@@ -432,13 +440,13 @@ GroupHashTable::~GroupHashTable() {
 // ========== РЕАЛИЗАЦИЯ TreeHashTable ==========
 
 TreeHashTable::TreeHashTable() {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         trees[i] = NULL;
     }
 }
 
 BTree* TreeHashTable::get_or_create_tree(int num) {
-    if (num < 0 || num >= 1000) return NULL;
+    if (num < 0 || num >= MAX_GROUP) return NULL;
     if (trees[num] == NULL) {
         trees[num] = new BTree(T);
     }
@@ -446,7 +454,7 @@ BTree* TreeHashTable::get_or_create_tree(int num) {
 }
 
 BTree* TreeHashTable::get_tree(int num) {
-    if (num < 0 || num >= 1000) return NULL;
+    if (num < 0 || num >= MAX_GROUP) return NULL;
     return trees[num];
 }
 
@@ -459,7 +467,7 @@ Student* TreeHashTable::searchByName(int groupNum, const std::string& name) {
 }
 
 Student* TreeHashTable::searchByNameAll(const std::string& name) {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         if (trees[i] != NULL) {
             Student* s = trees[i]->search(name);
             if (s != NULL) {
@@ -483,7 +491,7 @@ bool TreeHashTable::delete_from_tree(int groupNum, const std::string& name) {
 }
 
 TreeHashTable::~TreeHashTable() {
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         delete trees[i];
     }
 }
@@ -541,55 +549,6 @@ void DataManager::load(const std::string& filename) {
     file.close();
 }
 
-bool DataManager::deleteStudent(const std::string& name) {
-    Student* student = treeTable.searchByNameAll(name);
-    
-    if (student == NULL) {
-        return false;
-    }
-    
-    int groupNum = student->group;
-    
-    bool treeDeleted = treeTable.delete_from_tree(groupNum, name);
-    
-    GroupList* group = listTable.get_list(groupNum);
-    bool listDeleted = false;
-    if (group != NULL) {
-        listDeleted = group->deleteStudentByName(name);
-    }
-    
-    return treeDeleted && listDeleted;
-}
-
-bool DataManager::deleteStudentFromGroup(int groupNum, const std::string& name) {
-    bool treeDeleted = treeTable.delete_from_tree(groupNum, name);
-    
-    GroupList* group = listTable.get_list(groupNum);
-    bool listDeleted = false;
-    if (group != NULL) {
-        listDeleted = group->deleteStudentByName(name);
-    }
-    
-    return treeDeleted && listDeleted;
-}
-
-Student* DataManager::findStudentByName(const std::string& name) {
-    return treeTable.searchByNameAll(name);
-}
-
-Student* DataManager::findStudentByRating(double rating) {
-    return listTable.findStudentByRating(rating);
-}
-
-Student* DataManager::findStudentByName_group(const std::string& name, int group) {
-    if(treeTable.searchByName(group, name) == NULL) {throw std::invalid_argument("Студент не найден"); return NULL; }
-    else return treeTable.searchByName(group, name);
-}
-
-Student* DataManager::findStudentByRating_group(double rating, int group) {
-    return listTable.findStudentByRating_group(rating, group);
-
-}
 
 // ========== РЕАЛИЗАЦИЯ НОВЫХ МЕТОДОВ BTreeNode ==========
 
@@ -665,31 +624,6 @@ bool TreeHashTable::deleteBySubstringFromGroup(int groupNum, const std::string& 
 }
 
 // ========== РЕАЛИЗАЦИЯ НОВЫХ МЕТОДОВ DataManager ==========
-
-std::vector<Student*> DataManager::findStudentsBySubstringInGroup(const std::string& substr, int group) {
-    if (group < 0 || group >= 1000) {
-        throw std::out_of_range("Некорректный номер группы");
-    }
-    return treeTable.searchBySubstringInGroup(group, substr);
-}
-
-int DataManager::deleteStudentsBySubstringFromGroup(const std::string& substr, int group) {
-    if (group < 0 || group >= 1000) {
-        throw std::out_of_range("Некорректный номер группы");
-    }
-
-    // Находим всех студентов для удаления
-    std::vector<Student*> toDelete = treeTable.searchBySubstringInGroup(group, substr);
-    int count = toDelete.size();
-
-    if (count > 0) {
-        // Выполняем удаление
-        treeTable.deleteBySubstringFromGroup(group, substr, listTable);
-    }
-
-    return count;
-}
-
 // ========== РЕАЛИЗАЦИЯ НОВОГО МЕТОДА DataManager ==========
 
 void DataManager::rewriteFile(const std::string& filename) {
@@ -701,7 +635,7 @@ void DataManager::rewriteFile(const std::string& filename) {
     }
 
     // Проходим по всем группам
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < MAX_GROUP; i++) {
         GroupList* group = listTable.get_list(i);
         if (group != NULL) {
             // Получаем список студентов группы
@@ -718,6 +652,10 @@ void DataManager::rewriteFile(const std::string& filename) {
     file.close();
 }
 
+
+
+
+
 void TreeHashTable::debug_print_tree(int groupNum) {
     BTree* tree = get_tree(groupNum);
     if (tree == NULL) {
@@ -725,4 +663,206 @@ void TreeHashTable::debug_print_tree(int groupNum) {
         return;
     }
     std::cout << "Дерево для группы " << groupNum << " существует" << std::endl;
+}
+
+// ========== РЕАЛИЗАЦИЯ МЕТОДОВ ПАРСИНГА DataManager ==========
+
+std::string DataManager::trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t");
+    if (last == std::string::npos) return "";
+    return str.substr(first, last - first + 1);
+}
+
+void DataManager::parseGroup(const std::string& token, United& info) {
+    std::string groupStr = token;
+    size_t eqPos = groupStr.find('=');
+    if (eqPos != std::string::npos) {
+        if (eqPos + 1 < groupStr.length()) {
+            groupStr = groupStr.substr(eqPos + 1);
+        } else {
+            return;
+        }
+    }
+    groupStr = trim(groupStr);
+    if (groupStr.empty()) return;
+    
+    size_t dashPos = groupStr.find('-');
+    if (dashPos != std::string::npos) {
+        int start = atoi(trim(groupStr.substr(0, dashPos)).c_str());
+        int end = atoi(trim(groupStr.substr(dashPos + 1)).c_str());
+        info.has_group_filter = true;
+        info.group_nums.clear();
+        for (int g = start; g <= end; g++) {
+            info.group_nums.push_back(g);
+        }
+    } else {
+        int group = atoi(groupStr.c_str());
+        info.has_group_filter = true;
+        info.group_nums.clear();
+        info.group_nums.push_back(group);
+    }
+}
+
+void DataManager::parseRating(const std::string& token, United& info) {
+    std::string ratingStr = token;
+    size_t eqPos = ratingStr.find('=');
+    if (eqPos != std::string::npos) {
+        if (eqPos + 1 < ratingStr.length()) {
+            ratingStr = ratingStr.substr(eqPos + 1);
+        } else {
+            return;
+        }
+    }
+    ratingStr = trim(ratingStr);
+    if (ratingStr.empty()) return;
+    
+    size_t dashPos = ratingStr.find('-');
+    if (dashPos != std::string::npos) {
+        info.min_rating = atof(trim(ratingStr.substr(0, dashPos)).c_str());
+        info.max_rating = atof(trim(ratingStr.substr(dashPos + 1)).c_str());
+    } else {
+        info.min_rating = info.max_rating = atof(ratingStr.c_str());
+    }
+    info.has_rating_filter = true;
+}
+
+// ========== РЕАЛИЗАЦИЯ DataManager::do_request ==========
+
+void DataManager::do_request(const std::string& req) {
+    United info;
+    std::stringstream ss(trim(req));
+    std::string token;
+    
+    // Считываем команду
+    ss >> token;
+    std::string commandStr = token;
+    std::transform(commandStr.begin(), commandStr.end(), commandStr.begin(), ::toupper);
+    
+    // Парсим параметры (для всех команд, где они нужны)
+    while (ss >> token) {
+        if (!token.empty() && token.back() == ',') {
+            token.pop_back();
+        }
+        
+        std::string lower = token;
+        std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+        
+        if (lower.find("name=") == 0) {
+            std::string nameValue = token.substr(5);
+            nameValue = trim(nameValue);
+            info.has_subname = true;
+            if (!nameValue.empty() && nameValue.back() == '*') {
+                info.subname = nameValue.substr(0, nameValue.length() - 1);
+            } else {
+                info.subname = nameValue;
+            }
+        }
+        else if (lower == "group" || lower == "group=") {
+            ss >> token;
+            if (!token.empty() && token.back() == ',') token.pop_back();
+            parseGroup(token, info);
+        }
+        else if (lower.find("group=") == 0) {
+            parseGroup(token.substr(6), info);
+        }
+        else if (lower == "rating" || lower == "rating=") {
+            ss >> token;
+            if (!token.empty() && token.back() == ',') token.pop_back();
+            parseRating(token, info);
+        }
+        else if (lower.find("rating=") == 0) {
+            parseRating(token.substr(7), info);
+        }
+    }
+    
+    // Заполняем значения по умолчанию
+    if (!info.has_group_filter) {
+        for (int i = 0; i < MAX_GROUP; i++) {
+            info.group_nums.push_back(i);
+        }
+    }
+    
+    if (!info.has_rating_filter) {
+        info.min_rating = 2.0;
+        info.max_rating = 5.0;
+    }
+    
+    std::vector<Student*> results;
+    
+    // ВЫПОЛНЕНИЕ КОМАНДЫ
+    if (commandStr == "SELECT") {
+        // Поиск по подстроке, если указана
+        if (info.has_subname && !info.subname.empty()) {
+            for (size_t i = 0; i < info.group_nums.size(); i++) {
+                std::vector<Student*> found = treeTable.searchBySubstringInGroup(info.group_nums[i], info.subname);
+                for (size_t j = 0; j < found.size(); j++) {
+                    if (found[j]->rating >= info.min_rating && found[j]->rating <= info.max_rating) {
+                        results.push_back(found[j]);
+                    }
+                }
+            }
+        } else {
+            // Нет подстроки - ищем по рейтингу
+            for (size_t i = 0; i < info.group_nums.size(); i++) {
+                GroupList* group = listTable.get_list(info.group_nums[i]);
+                if (group != NULL) {
+                    std::list<Student*>& students = group->getStudents();
+                    for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
+                        if ((*it)->rating >= info.min_rating && (*it)->rating <= info.max_rating) {
+                            results.push_back(*it);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Запись результата в файл
+        std::ofstream out("output.txt");
+        for (size_t i = 0; i < results.size(); i++) {
+            out << results[i]->name << ";" << results[i]->group << ";" << results[i]->rating << std::endl;
+        }
+        out.close();
+    }
+    else if (commandStr == "RESELECT") {
+        // TODO: RESELECT - перевыполнить предыдущий запрос
+        // Нужно хранить последний запрос и его результаты
+        std::ofstream out("output.txt");
+        out << "RESELECT: команда пока не реализована" << std::endl;
+        out.close();
+    }
+    else if (commandStr == "PRINT") {
+        // TODO: PRINT - вывести текущие данные (возможно, всю базу)
+        std::ofstream out("output.txt");
+        for (int i = 0; i < MAX_GROUP; i++) {
+            GroupList* group = listTable.get_list(i);
+            if (group != NULL) {
+                std::list<Student*>& students = group->getStudents();
+                for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
+                    out << (*it)->name << ";" << (*it)->group << ";" << (*it)->rating << std::endl;
+                }
+            }
+        }
+        out.close();
+    }
+    else if (commandStr == "INSERT") {
+        // TODO: INSERT - вставка нового студента
+        // Формат: INSERT name = Имя, group = номер, rating = рейтинг
+        std::ofstream out("output.txt");
+        out << "INSERT: команда пока не реализована" << std::endl;
+        out.close();
+    }
+    else if (commandStr == "REMOVE") {
+        // TODO: REMOVE - удаление студентов по условию
+        std::ofstream out("output.txt");
+        out << "REMOVE: команда пока не реализована" << std::endl;
+        out.close();
+    }
+    else {
+        // Неизвестная команда
+        std::ofstream out("output.txt");
+        out << "Неизвестная команда: " << commandStr << std::endl;
+        out.close();
+    }
 }

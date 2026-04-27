@@ -11,6 +11,7 @@
 #include <algorithm>
 
 const int T = 3;  // минимальная степень B-дерева
+const int MAX_GROUP = 1000; //максимальное число групп
 
 // ========== СТРУКТУРА STUDENT ==========
 
@@ -22,6 +23,8 @@ struct Student {
     Student(std::string name, int group, double rating);  // конструктор с валидацией
     bool operator<(const Student& other) const;           // сравнение по имени
     bool operator>(const Student& other) const;           // обратное сравнение
+    bool operator>=(double r);
+    bool operator<=(double r);
 };
 
 // ========== B-ДЕРЕВО ==========
@@ -90,14 +93,14 @@ public:
 
 class GroupHashTable {
 private:
-    GroupList* groups[1000];  // массив указателей на группы (0-999)
+    GroupList* groups[MAX_GROUP];  // массив указателей на группы (0-999)
 
 public:
     GroupHashTable();                                               // конструктор
     GroupList* get_or_create_list(int num);                         // получить или создать
     GroupList* get_list(int num);                                   // получить существующую
     Student* findStudentByRating(double rating);                    // поиск студента по рейтингу
-    Student* findStudentByRating_group(double rating, int group);     // поиск в группе по рейтингу
+    Student* findStudentByRating_group(double rating, int group);    // поиск в группе по рейтингу
     ~GroupHashTable();                                              // деструктор
 };
 
@@ -105,7 +108,7 @@ public:
 
 class TreeHashTable {
 private:
-    BTree* trees[1000];  // массив указателей на деревья (0-999)
+    BTree* trees[MAX_GROUP];  // массив указателей на деревья (0-999)
 
 public:
     TreeHashTable();                                        // конструктор
@@ -120,25 +123,54 @@ public:
     ~TreeHashTable();                                       // деструктор
 };
 
+// ========== СТРУКТУРЫ ДЛЯ ЗАПРОСОВ ==========
+
+struct United {
+    std::vector<int> group_nums;
+    double max_rating;
+    double min_rating;
+    std::string subname;
+    bool has_subname;
+    bool has_group_filter;
+    bool has_rating_filter;
+    
+    United() : max_rating(5.0), min_rating(2.0), has_subname(false), 
+               has_group_filter(false), has_rating_filter(false) {}
+    
+    United(std::vector<int> groups, double max_r, double min_r, std::string subname) 
+        : group_nums(groups), max_rating(max_r), min_rating(min_r), subname(subname),
+          has_subname(!subname.empty()), has_group_filter(!groups.empty()),
+          has_rating_filter(true) {}
+};
+
+typedef enum { SELECT, RESELECT, PRINT, INSERT, REMOVE, UNKNOWN } Commands;
+
+class Request {
+public:
+    Commands command;
+    United info;
+    
+    Request() : command(UNKNOWN) {}
+    Request(Commands cmd, const United& inf) : command(cmd), info(inf) {}
+};
+
 // ========== ОБЪЕДИНЕННЫЙ МЕНЕДЖЕР ==========
 
 class DataManager {
 private:
     GroupHashTable& listTable;   // таблица списков
     TreeHashTable& treeTable;    // таблица деревьев
-
+    
+    // Приватные методы для парсинга (новые)
+    std::string trim(const std::string& str);
+    void parseGroup(const std::string& token, United& info);
+    void parseRating(const std::string& token, United& info);
+    
 public:
     DataManager(GroupHashTable& lists, TreeHashTable& trees);  // конструктор
     void load(const std::string& filename);                     // загрузка из файла
-    bool deleteStudent(const std::string& name);                // удалить по имени
-    bool deleteStudentFromGroup(int groupNum, const std::string& name);  // удалить из группы
-    Student* findStudentByName(const std::string& name);        // найти студента по имени (через дерево)
-    Student* findStudentByRating(double rating);                 // найти студента по рейтингу (через список)
-    Student* findStudentByName_group(const std::string& name, int group); // найти по имени и по группе
-    Student* findStudentByRating_group(double rating, int group); // найти по рейтингу и по группе
-    std::vector<Student*> findStudentsBySubstringInGroup(const std::string& substr, int group);
-    int deleteStudentsBySubstringFromGroup(const std::string& substr, int group);   
-    void rewriteFile(const std::string& filename);  // Перезаписать файл текущими данными
+    void rewriteFile(const std::string& filename);              // Перезаписать файл текущими данными
+    void do_request(const std::string& req);                    // выполнить запрос (результат в output.txt)
 };
 
 #endif // HEADER1_H

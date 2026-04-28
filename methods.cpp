@@ -729,28 +729,65 @@ void DataManager::parseRating(const std::string& token, United& info) {
 }
 
 // ========== РЕАЛИЗАЦИЯ DataManager::do_request ==========
+// ========== РЕАЛИЗАЦИЯ DataManager::do_request ==========
 
 void DataManager::do_request(const std::string& req) {
     United info;
     std::stringstream ss(trim(req));
     std::string token;
-    
+
     // Считываем команду
     ss >> token;
     std::string commandStr = token;
     std::transform(commandStr.begin(), commandStr.end(), commandStr.begin(), ::toupper);
-    
-    // Парсим параметры (для всех команд, где они нужны)
+
+    // Парсим параметры
     while (ss >> token) {
         if (!token.empty() && token.back() == ',') {
             token.pop_back();
         }
-        
+
         std::string lower = token;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-        
-        if (lower.find("name=") == 0) {
-            std::string nameValue = token.substr(5);
+
+        // Обработка name (может содержать пробелы!)
+        if (lower == "name") {
+            // Пропускаем "=" если есть
+            ss >> token;
+            if (token == "=") {
+                ss >> token;
+            }
+
+            std::string nameValue;
+            bool firstToken = true;
+
+            // Читаем имя до запятой или следующего ключевого слова
+            while (true) {
+                // Проверяем, не ключевое ли слово
+                std::string nextLower = token;
+                std::transform(nextLower.begin(), nextLower.end(), nextLower.begin(), ::tolower);
+
+                if (nextLower == "group" || nextLower == "rating") {
+                    // Возвращаем токен обратно
+                    ss << " " << token;
+                    break;
+                }
+
+                // Убираем запятую в конце
+                if (!token.empty() && token.back() == ',') {
+                    token.pop_back();
+                    if (!firstToken) nameValue += " ";
+                    nameValue += token;
+                    break;
+                }
+
+                if (!firstToken) nameValue += " ";
+                nameValue += token;
+                firstToken = false;
+
+                if (!(ss >> token)) break;
+            }
+
             nameValue = trim(nameValue);
             info.has_subname = true;
             if (!nameValue.empty() && nameValue.back() == '*') {
@@ -759,41 +796,48 @@ void DataManager::do_request(const std::string& req) {
                 info.subname = nameValue;
             }
         }
-        else if (lower == "group" || lower == "group=") {
+        // Обработка group
+        else if (lower == "group") {
+            // Пропускаем "=" если есть
             ss >> token;
+            if (token == "=") {
+                ss >> token;
+            }
             if (!token.empty() && token.back() == ',') token.pop_back();
             parseGroup(token, info);
+            info.has_group_filter = true;
         }
-        else if (lower.find("group=") == 0) {
-            parseGroup(token.substr(6), info);
-        }
-        else if (lower == "rating" || lower == "rating=") {
+        // Обработка rating
+        else if (lower == "rating") {
+            // Пропускаем "=" если есть
             ss >> token;
+            if (token == "=") {
+                ss >> token;
+            }
             if (!token.empty() && token.back() == ',') token.pop_back();
             parseRating(token, info);
-        }
-        else if (lower.find("rating=") == 0) {
-            parseRating(token.substr(7), info);
+            info.has_rating_filter = true;
         }
     }
-    
-    // Заполняем значения по умолчанию
-    if (!info.has_group_filter) {
-        for (int i = 0; i < MAX_GROUP; i++) {
-            info.group_nums.push_back(i);
-        }
-    }
-    
-    if (!info.has_rating_filter) {
-        info.min_rating = 2.0;
-        info.max_rating = 5.0;
-    }
-    
-    std::vector<Student*> results;
-    
-    // ВЫПОЛНЕНИЕ КОМАНДЫ
+
+    // Для SELECT: заполняем значения по умолчанию
     if (commandStr == "SELECT") {
-        // Поиск по подстроке, если указана
+        if (!info.has_group_filter) {
+            for (int i = 0; i < MAX_GROUP; i++) {
+                info.group_nums.push_back(i);
+            }
+        }
+
+        if (!info.has_rating_filter) {
+            info.min_rating = 2.0;
+            info.max_rating = 5.0;
+        }
+    }
+
+    std::vector<Student*> results;
+
+    // ========== SELECT ==========
+    if (commandStr == "SELECT") {
         if (info.has_subname && !info.subname.empty()) {
             for (size_t i = 0; i < info.group_nums.size(); i++) {
                 std::vector<Student*> found = treeTable.searchBySubstringInGroup(info.group_nums[i], info.subname);
@@ -804,7 +848,6 @@ void DataManager::do_request(const std::string& req) {
                 }
             }
         } else {
-            // Нет подстроки - ищем по рейтингу
             for (size_t i = 0; i < info.group_nums.size(); i++) {
                 GroupList* group = listTable.get_list(info.group_nums[i]);
                 if (group != NULL) {
@@ -817,23 +860,78 @@ void DataManager::do_request(const std::string& req) {
                 }
             }
         }
-        
-        // Запись результата в файл
+
         std::ofstream out("output.txt");
         for (size_t i = 0; i < results.size(); i++) {
             out << results[i]->name << ";" << results[i]->group << ";" << results[i]->rating << std::endl;
         }
         out.close();
     }
-    else if (commandStr == "RESELECT") {
-        // TODO: RESELECT - перевыполнить предыдущий запрос
-        // Нужно хранить последний запрос и его результаты
-        std::ofstream out("output.txt");
-        out << "RESELECT: команда пока не реализована" << std::endl;
-        out.close();
+    // ========== INSERT ==========
+    else if (commandStr == "INSERT") {
+        // Проверяем, что все поля заполнены
+        if (!info.has_subname || info.subname.empty()) {
+            std::ofstream out("output.txt");
+            out << "INSERT: не указано имя студента" << std::endl;
+            out.close();
+            return;
+        }
+
+        if (!info.has_group_filter || info.group_nums.empty()) {
+            std::ofstream out("output.txt");
+            out << "INSERT: не указана группа. Используйте: group = N" << std::endl;
+            out.close();
+            return;
+        }
+
+        if (!info.has_rating_filter) {
+            std::ofstream out("output.txt");
+            out << "INSERT: не указан рейтинг. Используйте: rating = X" << std::endl;
+            out.close();
+            return;
+        }
+
+        int groupNum = info.group_nums[0];
+        double rating = info.min_rating;
+
+        if (groupNum < 0 || groupNum >= MAX_GROUP) {
+            std::ofstream out("output.txt");
+            out << "INSERT: некорректный номер группы (0-999)" << std::endl;
+            out.close();
+            return;
+        }
+
+        if (rating < 2.0 || rating > 5.0) {
+            std::ofstream out("output.txt");
+            out << "INSERT: некорректный рейтинг (2.0-5.0)" << std::endl;
+            out.close();
+            return;
+        }
+
+        try {
+            Student* newStudent = new Student(info.subname, groupNum, rating);
+
+            GroupList* group = listTable.get_or_create_list(groupNum);
+            group->add_student(newStudent);
+            group->sortByRating();
+
+            BTree* tree = treeTable.get_or_create_tree(groupNum);
+            tree->insert(newStudent);
+
+            std::ofstream out("output.txt");
+            out << "INSERT: успешно добавлен студент \"" << info.subname
+                << "\" (группа " << groupNum << ", рейтинг " << rating << ")" << std::endl;
+            out.close();
+        }
+        catch (const std::exception& e) {
+            std::ofstream out("output.txt");
+            out << "INSERT: ошибка - " << e.what() << std::endl;
+            out.close();
+        }
     }
+    // ========== REMOVE ==========
+    // ========== PRINT ==========
     else if (commandStr == "PRINT") {
-        // TODO: PRINT - вывести текущие данные (возможно, всю базу)
         std::ofstream out("output.txt");
         for (int i = 0; i < MAX_GROUP; i++) {
             GroupList* group = listTable.get_list(i);
@@ -846,23 +944,16 @@ void DataManager::do_request(const std::string& req) {
         }
         out.close();
     }
-    else if (commandStr == "INSERT") {
-        // TODO: INSERT - вставка нового студента
-        // Формат: INSERT name = Имя, group = номер, rating = рейтинг
+    // ========== RESELECT ==========
+    else if (commandStr == "RESELECT") {
         std::ofstream out("output.txt");
-        out << "INSERT: команда пока не реализована" << std::endl;
-        out.close();
-    }
-    else if (commandStr == "REMOVE") {
-        // TODO: REMOVE - удаление студентов по условию
-        std::ofstream out("output.txt");
-        out << "REMOVE: команда пока не реализована" << std::endl;
+        out << "RESELECT: команда пока не реализована" << std::endl;
         out.close();
     }
     else {
-        // Неизвестная команда
         std::ofstream out("output.txt");
         out << "Неизвестная команда: " << commandStr << std::endl;
+        out << "Доступные команды: SELECT, INSERT, REMOVE, PRINT, RESELECT" << std::endl;
         out.close();
     }
 }

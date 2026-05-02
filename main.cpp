@@ -12,8 +12,8 @@ int main() {
             std::getline(std::cin, r);
             if(r == "q") { break; }
             else dm.do_request(r);
-            dm.rewriteFile("dbfile.txt");
         }
+        dm.rewriteFile("dbfile.txt");
     }
     catch (const std::exception& e) {
         std::cerr << "Ошибка: " << e.what() << "\n";

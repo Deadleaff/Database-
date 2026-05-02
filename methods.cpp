@@ -930,6 +930,133 @@ void DataManager::do_request(const std::string& req) {
         }
     }
     // ========== REMOVE ==========
+
+    else if (commandStr == "REMOVE") {
+        int removedCount = 0;
+        std::vector<std::string> removedNames;
+        
+        // Если указано имя с подстрокой - используем deleteBySubstringFromGroup
+        if (info.has_subname && !info.subname.empty()) {
+            // Определяем группы для удаления
+            std::vector<int> groupsToCheck;
+            if (info.has_group_filter && !info.group_nums.empty()) {
+                groupsToCheck = info.group_nums;
+            } else {
+                for (int i = 0; i < MAX_GROUP; i++) {
+                    if (listTable.get_list(i) != NULL) {
+                        groupsToCheck.push_back(i);
+                    }
+                }
+            }
+            
+            // Для каждой группы удаляем студентов по подстроке
+            for (size_t i = 0; i < groupsToCheck.size(); i++) {
+                int groupNum = groupsToCheck[i];
+                
+                // Сначала найдем студентов для подсчета (через searchBySubstringInGroup)
+                std::vector<Student*> found = treeTable.searchBySubstringInGroup(groupNum, info.subname);
+                
+                // Фильтруем по рейтингу если нужно
+                std::vector<Student*> toDelete;
+                for (size_t j = 0; j < found.size(); j++) {
+                    if (info.has_rating_filter) {
+                        if (found[j]->rating >= info.min_rating && found[j]->rating <= info.max_rating) {
+                            toDelete.push_back(found[j]);
+                        }
+                    } else {
+                        toDelete.push_back(found[j]);
+                    }
+                }
+                
+                // Сохраняем имена для отчета
+                for (size_t j = 0; j < toDelete.size(); j++) {
+                    removedNames.push_back(toDelete[j]->name);
+                }
+                removedCount += toDelete.size();
+                
+                // Используем ваш метод deleteBySubstringFromGroup
+                if (toDelete.size() > 0) {
+                    treeTable.deleteBySubstringFromGroup(groupNum, info.subname, listTable);
+                }
+            }
+        }
+        // Если имя не указано, но есть группа или рейтинг
+        else if (info.has_group_filter || info.has_rating_filter) {
+            std::vector<int> groupsToCheck;
+            if (info.has_group_filter && !info.group_nums.empty()) {
+                groupsToCheck = info.group_nums;
+            } else {
+                for (int i = 0; i < MAX_GROUP; i++) {
+                    if (listTable.get_list(i) != NULL) {
+                        groupsToCheck.push_back(i);
+                    }
+                }
+            }
+            
+            for (size_t i = 0; i < groupsToCheck.size(); i++) {
+                int groupNum = groupsToCheck[i];
+                GroupList* group = listTable.get_list(groupNum);
+                BTree* tree = treeTable.get_tree(groupNum);
+                
+                if (group == NULL || tree == NULL) {
+                    continue;
+                }
+                
+                std::list<Student*>& students = group->getStudents();
+                std::vector<Student*> toDelete;
+                
+                for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
+                    Student* s = *it;
+                    bool matches = true;
+                    
+                    if (info.has_rating_filter) {
+                        if (s->rating < info.min_rating - 0.0001 || s->rating > info.max_rating + 0.0001) {
+                            matches = false;
+                        }
+                    }
+                    
+                    if (matches) {
+                        toDelete.push_back(s);
+                    }
+                }
+                
+                for (size_t j = 0; j < toDelete.size(); j++) {
+                    Student* s = toDelete[j];
+                    removedNames.push_back(s->name);
+                    tree->remove(s->name);
+                    group->deleteStudentByName(s->name);
+                    removedCount++;
+                }
+            }
+        }
+        
+        // Записываем результат
+        std::ofstream out("output.txt");
+        if (removedCount == 0) {
+            out << "REMOVE: не найдено студентов для удаления" << std::endl;
+            if (info.has_subname) {
+                out << "  Поиск по имени: \"" << info.subname << "\"" << std::endl;
+            }
+            if (info.has_group_filter) {
+                out << "  Поиск по группам: ";
+                for (size_t i = 0; i < info.group_nums.size() && i < 10; i++) {
+                    out << info.group_nums[i] << " ";
+                }
+                out << std::endl;
+            }
+            if (info.has_rating_filter) {
+                out << "  Поиск по рейтингу: " << info.min_rating << " - " << info.max_rating << std::endl;
+            }
+        } else {
+            out << "REMOVE: удалено студентов: " << removedCount << std::endl;
+            out << "Удаленные студенты:" << std::endl;
+            for (size_t i = 0; i < removedNames.size(); i++) {
+                out << "  - " << removedNames[i] << std::endl;
+            }
+        }
+        out.close();
+    }
+
     // ========== PRINT ==========
     else if (commandStr == "PRINT") {
         std::ofstream out("output.txt");

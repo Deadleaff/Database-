@@ -143,16 +143,7 @@ struct United {
           has_rating_filter(true) {}
 };
 
-typedef enum { SELECT, RESELECT, PRINT, INSERT, REMOVE, UNKNOWN } Commands;
-
-class Request {
-public:
-    Commands command;
-    United info;
-    
-    Request() : command(UNKNOWN) {}
-    Request(Commands cmd, const United& inf) : command(cmd), info(inf) {}
-};
+struct Result;
 
 // ========== ОБЪЕДИНЕННЫЙ МЕНЕДЖЕР ==========
 
@@ -165,12 +156,90 @@ private:
     std::string trim(const std::string& str);
     void parseGroup(const std::string& token, United& info);
     void parseRating(const std::string& token, United& info);
+
+    Result handle_select(const United& info);
+    Result handle_insert(const United& info);
+    Result handle_remove(const United& info);
     
 public:
     DataManager(GroupHashTable& lists, TreeHashTable& trees);  // конструктор
     void load(const std::string& filename);                     // загрузка из файла
     void rewriteFile(const std::string& filename);              // Перезаписать файл текущими данными
-    void do_request(const std::string& req);                    // выполнить запрос (результат в output.txt)
+    Result execute_request(const std::string& req);
 };
 
-#endif // HEADER1_H
+
+// ============================================================
+// КОДЫ ОШИБОК
+// ============================================================
+
+enum ErrorCode {
+    SUCCESS = 0,
+    ERROR_UNKNOWN_COMMAND = 1,
+    ERROR_INVALID_NAME = 2,
+    ERROR_INVALID_GROUP = 3,
+    ERROR_INVALID_RATING = 4,
+    ERROR_STUDENT_NOT_FOUND = 5,
+    ERROR_DUPLICATE_STUDENT = 6,
+    ERROR_GROUP_NOT_FOUND = 7,
+    ERROR_INSERT_FAILED = 8,
+    ERROR_REMOVE_FAILED = 9,
+    ERROR_INTERNAL = 99
+};
+
+// ============================================================
+// СТРУКТУРА RESULT
+// ============================================================
+
+
+struct Result {
+    int error_code;                    // 0 = успех, иначе код ошибки
+    std::string error_message;         // Текст ошибки (если есть)
+    std::vector<Student*> students;    // Найденные студенты (для SELECT)
+    std::string message;               // Дополнительное сообщение (для INSERT/REMOVE)
+
+    // Конструкторы
+    Result() : error_code(SUCCESS) {}
+
+    // Успешный результат с данными (для SELECT)
+    Result(const std::vector<Student*>& students)
+        : error_code(SUCCESS), students(students) {}
+
+    // Успешный результат с сообщением (для INSERT/REMOVE)
+    Result(const std::string& msg)
+        : error_code(SUCCESS), message(msg) {}
+
+    // Успешный результат с кодом и сообщением
+    Result(int code, const std::string& msg)
+        : error_code(code), error_message(msg) {}
+
+    // Проверка на успех
+    bool is_success() const { return error_code == SUCCESS; }
+
+    // ============================================================
+    // СЕРИАЛИЗАЦИЯ ДЛЯ ОТПРАВКИ КЛИЕНТУ
+    // ============================================================
+
+    std::string serialize();
+
+    // ============================================================
+    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
+    // ============================================================
+
+    std::string get_error_string() const {
+        switch (error_code) {
+            case SUCCESS: return "Успех";
+            case ERROR_UNKNOWN_COMMAND: return "Неизвестная команда";
+            case ERROR_INVALID_NAME: return "Некорректное имя";
+            case ERROR_INVALID_GROUP: return "Некорректная группа";
+            case ERROR_INVALID_RATING: return "Некорректный рейтинг";
+            case ERROR_STUDENT_NOT_FOUND: return "Студент не найден";
+            case ERROR_DUPLICATE_STUDENT: return "Дубликат студента";
+            case ERROR_GROUP_NOT_FOUND: return "Группа не найдена";
+            case ERROR_INTERNAL: return "Внутренняя ошибка";
+            default: return "Неизвестная ошибка";
+        }
+    }
+
+};
+#endif

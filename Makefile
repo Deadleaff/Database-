@@ -1,13 +1,13 @@
 # Обычная сборка
-prog : main.o methods.o header2.h
-	g++ -o prog main.o methods.o
+server : server.o methods.o header2.h
+	g++ -o server server.o methods.o
 
 # Сборка с ASan
 prog_asan : main_asan.o methods_asan.o header2.h
 	g++ -fsanitize=address -g -o prog_asan main_asan.o methods_asan.o
 
-main.o : main.cpp header2.h
-	g++ -c -o main.o main.cpp
+server.o : server.cpp header2.h
+	g++ -c -o server.o server.cpp
 
 main_asan.o : main.cpp header2.h
 	g++ -fsanitize=address -g -c -o main_asan.o main.cpp
@@ -19,6 +19,6 @@ methods_asan.o : methods.cpp header2.h
 	g++ -fsanitize=address -g -c -o methods_asan.o methods.cpp
 
 clean:
-	rm -f prog prog_asan *.o
+	rm -f server prog_asan *.o
 
 .PHONY: clean

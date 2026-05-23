@@ -652,10 +652,6 @@ void DataManager::rewriteFile(const std::string& filename) {
     file.close();
 }
 
-
-
-
-
 void TreeHashTable::debug_print_tree(int groupNum) {
     BTree* tree = get_tree(groupNum);
     if (tree == NULL) {
@@ -728,10 +724,12 @@ void DataManager::parseRating(const std::string& token, United& info) {
     info.has_rating_filter = true;
 }
 
-// ========== РЕАЛИЗАЦИЯ DataManager::do_request ==========
-// ========== РЕАЛИЗАЦИЯ DataManager::do_request ==========
+// ============================================================
+// СЕРВЕРНАЯ ВЕРСИЯ execute_request
+// ============================================================
 
-void DataManager::do_request(const std::string& req) {
+
+Result DataManager::execute_request(const std::string& req) {
     United info;
     std::stringstream ss(trim(req));
     std::string token;
@@ -761,19 +759,15 @@ void DataManager::do_request(const std::string& req) {
             std::string nameValue;
             bool firstToken = true;
 
-            // Читаем имя до запятой или следующего ключевого слова
             while (true) {
-                // Проверяем, не ключевое ли слово
                 std::string nextLower = token;
                 std::transform(nextLower.begin(), nextLower.end(), nextLower.begin(), ::tolower);
 
                 if (nextLower == "group" || nextLower == "rating") {
-                    // Возвращаем токен обратно
                     ss << " " << token;
                     break;
                 }
 
-                // Убираем запятую в конце
                 if (!token.empty() && token.back() == ',') {
                     token.pop_back();
                     if (!firstToken) nameValue += " ";
@@ -798,7 +792,6 @@ void DataManager::do_request(const std::string& req) {
         }
         // Обработка group
         else if (lower == "group") {
-            // Пропускаем "=" если есть
             ss >> token;
             if (token == "=") {
                 ss >> token;
@@ -809,7 +802,6 @@ void DataManager::do_request(const std::string& req) {
         }
         // Обработка rating
         else if (lower == "rating") {
-            // Пропускаем "=" если есть
             ss >> token;
             if (token == "=") {
                 ss >> token;
@@ -820,267 +812,282 @@ void DataManager::do_request(const std::string& req) {
         }
     }
 
-    // Для SELECT: заполняем значения по умолчанию
+    // ВЫПОЛНЕНИЕ КОМАНДЫ
     if (commandStr == "SELECT") {
+        // Заполняем значения по умолчанию
         if (!info.has_group_filter) {
             for (int i = 0; i < MAX_GROUP; i++) {
                 info.group_nums.push_back(i);
             }
         }
-
         if (!info.has_rating_filter) {
             info.min_rating = 2.0;
             info.max_rating = 5.0;
         }
+        return handle_select(info);
     }
-
-    std::vector<Student*> results;
-
-    // ========== SELECT ==========
-    if (commandStr == "SELECT") {
-        if (info.has_subname && !info.subname.empty()) {
-            for (size_t i = 0; i < info.group_nums.size(); i++) {
-                std::vector<Student*> found = treeTable.searchBySubstringInGroup(info.group_nums[i], info.subname);
-                for (size_t j = 0; j < found.size(); j++) {
-                    if (found[j]->rating >= info.min_rating && found[j]->rating <= info.max_rating) {
-                        results.push_back(found[j]);
-                    }
-                }
-            }
-        } else {
-            for (size_t i = 0; i < info.group_nums.size(); i++) {
-                GroupList* group = listTable.get_list(info.group_nums[i]);
-                if (group != NULL) {
-                    std::list<Student*>& students = group->getStudents();
-                    for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
-                        if ((*it)->rating >= info.min_rating && (*it)->rating <= info.max_rating) {
-                            results.push_back(*it);
-                        }
-                    }
-                }
-            }
-        }
-
-        std::ofstream out("output.txt");
-        for (size_t i = 0; i < results.size(); i++) {
-            out << results[i]->name << ";" << results[i]->group << ";" << results[i]->rating << std::endl;
-        }
-        out.close();
-    }
-    // ========== INSERT ==========
     else if (commandStr == "INSERT") {
-        // Проверяем, что все поля заполнены
-        if (!info.has_subname || info.subname.empty()) {
-            std::ofstream out("output.txt");
-            out << "INSERT: не указано имя студента" << std::endl;
-            out.close();
-            return;
-        }
-
-        if (!info.has_group_filter || info.group_nums.empty()) {
-            std::ofstream out("output.txt");
-            out << "INSERT: не указана группа. Используйте: group = N" << std::endl;
-            out.close();
-            return;
-        }
-
-        if (!info.has_rating_filter) {
-            std::ofstream out("output.txt");
-            out << "INSERT: не указан рейтинг. Используйте: rating = X" << std::endl;
-            out.close();
-            return;
-        }
-
-        int groupNum = info.group_nums[0];
-        double rating = info.min_rating;
-
-        if (groupNum < 0 || groupNum >= MAX_GROUP) {
-            std::ofstream out("output.txt");
-            out << "INSERT: некорректный номер группы (0-999)" << std::endl;
-            out.close();
-            return;
-        }
-
-        if (rating < 2.0 || rating > 5.0) {
-            std::ofstream out("output.txt");
-            out << "INSERT: некорректный рейтинг (2.0-5.0)" << std::endl;
-            out.close();
-            return;
-        }
-
-        try {
-            Student* newStudent = new Student(info.subname, groupNum, rating);
-
-            GroupList* group = listTable.get_or_create_list(groupNum);
-            group->add_student(newStudent);
-            group->sortByRating();
-
-            BTree* tree = treeTable.get_or_create_tree(groupNum);
-            tree->insert(newStudent);
-
-            std::ofstream out("output.txt");
-            out << "INSERT: успешно добавлен студент \"" << info.subname
-                << "\" (группа " << groupNum << ", рейтинг " << rating << ")" << std::endl;
-            out.close();
-        }
-        catch (const std::exception& e) {
-            std::ofstream out("output.txt");
-            out << "INSERT: ошибка - " << e.what() << std::endl;
-            out.close();
-        }
+        return handle_insert(info);
     }
-    // ========== REMOVE ==========
-
     else if (commandStr == "REMOVE") {
-        int removedCount = 0;
-        std::vector<std::string> removedNames;
-        
-        // Если указано имя с подстрокой - используем deleteBySubstringFromGroup
-        if (info.has_subname && !info.subname.empty()) {
-            // Определяем группы для удаления
-            std::vector<int> groupsToCheck;
-            if (info.has_group_filter && !info.group_nums.empty()) {
-                groupsToCheck = info.group_nums;
-            } else {
-                for (int i = 0; i < MAX_GROUP; i++) {
-                    if (listTable.get_list(i) != NULL) {
-                        groupsToCheck.push_back(i);
-                    }
-                }
-            }
-            
-            // Для каждой группы удаляем студентов по подстроке
-            for (size_t i = 0; i < groupsToCheck.size(); i++) {
-                int groupNum = groupsToCheck[i];
-                
-                // Сначала найдем студентов для подсчета (через searchBySubstringInGroup)
-                std::vector<Student*> found = treeTable.searchBySubstringInGroup(groupNum, info.subname);
-                
-                // Фильтруем по рейтингу если нужно
-                std::vector<Student*> toDelete;
-                for (size_t j = 0; j < found.size(); j++) {
-                    if (info.has_rating_filter) {
-                        if (found[j]->rating >= info.min_rating && found[j]->rating <= info.max_rating) {
-                            toDelete.push_back(found[j]);
-                        }
-                    } else {
-                        toDelete.push_back(found[j]);
-                    }
-                }
-                
-                // Сохраняем имена для отчета
-                for (size_t j = 0; j < toDelete.size(); j++) {
-                    removedNames.push_back(toDelete[j]->name);
-                }
-                removedCount += toDelete.size();
-                
-                // Используем ваш метод deleteBySubstringFromGroup
-                if (toDelete.size() > 0) {
-                    treeTable.deleteBySubstringFromGroup(groupNum, info.subname, listTable);
-                }
-            }
-        }
-        // Если имя не указано, но есть группа или рейтинг
-        else if (info.has_group_filter || info.has_rating_filter) {
-            std::vector<int> groupsToCheck;
-            if (info.has_group_filter && !info.group_nums.empty()) {
-                groupsToCheck = info.group_nums;
-            } else {
-                for (int i = 0; i < MAX_GROUP; i++) {
-                    if (listTable.get_list(i) != NULL) {
-                        groupsToCheck.push_back(i);
-                    }
-                }
-            }
-            
-            for (size_t i = 0; i < groupsToCheck.size(); i++) {
-                int groupNum = groupsToCheck[i];
-                GroupList* group = listTable.get_list(groupNum);
-                BTree* tree = treeTable.get_tree(groupNum);
-                
-                if (group == NULL || tree == NULL) {
-                    continue;
-                }
-                
-                std::list<Student*>& students = group->getStudents();
-                std::vector<Student*> toDelete;
-                
-                for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
-                    Student* s = *it;
-                    bool matches = true;
-                    
-                    if (info.has_rating_filter) {
-                        if (s->rating < info.min_rating - 0.0001 || s->rating > info.max_rating + 0.0001) {
-                            matches = false;
-                        }
-                    }
-                    
-                    if (matches) {
-                        toDelete.push_back(s);
-                    }
-                }
-                
-                for (size_t j = 0; j < toDelete.size(); j++) {
-                    Student* s = toDelete[j];
-                    removedNames.push_back(s->name);
-                    tree->remove(s->name);
-                    group->deleteStudentByName(s->name);
-                    removedCount++;
-                }
-            }
-        }
-        
-        // Записываем результат
-        std::ofstream out("output.txt");
-        if (removedCount == 0) {
-            out << "REMOVE: не найдено студентов для удаления" << std::endl;
-            if (info.has_subname) {
-                out << "  Поиск по имени: \"" << info.subname << "\"" << std::endl;
-            }
-            if (info.has_group_filter) {
-                out << "  Поиск по группам: ";
-                for (size_t i = 0; i < info.group_nums.size() && i < 10; i++) {
-                    out << info.group_nums[i] << " ";
-                }
-                out << std::endl;
-            }
-            if (info.has_rating_filter) {
-                out << "  Поиск по рейтингу: " << info.min_rating << " - " << info.max_rating << std::endl;
-            }
-        } else {
-            out << "REMOVE: удалено студентов: " << removedCount << std::endl;
-            out << "Удаленные студенты:" << std::endl;
-            for (size_t i = 0; i < removedNames.size(); i++) {
-                out << "  - " << removedNames[i] << std::endl;
-            }
-        }
-        out.close();
-    }
-
-    // ========== PRINT ==========
-    else if (commandStr == "PRINT") {
-        std::ofstream out("output.txt");
-        for (int i = 0; i < MAX_GROUP; i++) {
-            GroupList* group = listTable.get_list(i);
-            if (group != NULL) {
-                std::list<Student*>& students = group->getStudents();
-                for (std::list<Student*>::iterator it = students.begin(); it != students.end(); ++it) {
-                    out << (*it)->name << ";" << (*it)->group << ";" << (*it)->rating << std::endl;
-                }
-            }
-        }
-        out.close();
-    }
-    // ========== RESELECT ==========
-    else if (commandStr == "RESELECT") {
-        std::ofstream out("output.txt");
-        out << "RESELECT: команда пока не реализована" << std::endl;
-        out.close();
+        return handle_remove(info);
     }
     else {
-        std::ofstream out("output.txt");
-        out << "Неизвестная команда: " << commandStr << std::endl;
-        out << "Доступные команды: SELECT, INSERT, REMOVE, PRINT, RESELECT" << std::endl;
-        out.close();
+        return Result(ERROR_UNKNOWN_COMMAND, "Неизвестная команда: " + commandStr);
     }
+}
+
+// ============================================================
+// HANDLE_SELECT
+// ============================================================
+
+Result DataManager::handle_select(const United& info) {
+    std::vector<Student*> results;
+
+    if (info.has_subname && !info.subname.empty()) {
+        // Поиск по подстроке
+        for (size_t i = 0; i < info.group_nums.size(); i++) {
+            if (info.group_nums[i] < 0 || info.group_nums[i] >= MAX_GROUP) {
+                continue;
+            }
+            std::vector<Student*> found = treeTable.searchBySubstringInGroup(
+                info.group_nums[i], info.subname);
+            for (size_t j = 0; j < found.size(); j++) {
+                if (found[j]->rating >= info.min_rating &&
+                    found[j]->rating <= info.max_rating) {
+                    results.push_back(found[j]);
+                }
+            }
+        }
+    } else {
+        // Поиск по рейтингу
+        for (size_t i = 0; i < info.group_nums.size(); i++) {
+            int groupNum = info.group_nums[i];
+            if (groupNum < 0 || groupNum >= MAX_GROUP) continue;
+
+            GroupList* group = listTable.get_list(groupNum);
+            if (group != NULL) {
+                std::list<Student*>& students = group->getStudents();
+                for (auto it = students.begin(); it != students.end(); ++it) {
+                    if ((*it)->rating >= info.min_rating &&
+                        (*it)->rating <= info.max_rating) {
+                        results.push_back(*it);
+                    }
+                }
+            }
+        }
+    }
+
+    return Result(results);
+}
+
+// ============================================================
+// HANDLE_INSERT
+// ============================================================
+
+Result DataManager::handle_insert(const United& info) {
+    // Проверки
+    if (!info.has_subname || info.subname.empty()) {
+        return Result(ERROR_INVALID_NAME, "Не указано имя студента. Используйте: name = Имя");
+    }
+
+    if (!info.has_group_filter || info.group_nums.empty()) {
+        return Result(ERROR_INVALID_GROUP, "Не указана группа. Используйте: group = N");
+    }
+
+    if (!info.has_rating_filter) {
+        return Result(ERROR_INVALID_RATING, "Не указан рейтинг. Используйте: rating = X.X");
+    }
+
+    int groupNum = info.group_nums[0];
+    double rating = info.min_rating;
+
+    if (groupNum < 0 || groupNum >= MAX_GROUP) {
+        return Result(ERROR_INVALID_GROUP, "Некорректный номер группы (0-999)");
+    }
+
+    if (rating < 2.0 || rating > 5.0) {
+        return Result(ERROR_INVALID_RATING, "Некорректный рейтинг (должен быть 2.0-5.0)");
+    }
+
+    try {
+        Student* newStudent = new Student(info.subname, groupNum, rating);
+
+        GroupList* group = listTable.get_or_create_list(groupNum);
+        group->add_student(newStudent);
+        group->sortByRating();
+
+        BTree* tree = treeTable.get_or_create_tree(groupNum);
+        tree->insert(newStudent);
+
+        std::string msg = "INSERT: успешно добавлен студент \"" + info.subname +
+                          "\" (группа " + std::to_string(groupNum) +
+                          ", рейтинг " + std::to_string(rating) + ")";
+        return Result(msg);
+    }
+    catch (const std::exception& e) {
+        return Result(ERROR_INSERT_FAILED, std::string("INSERT: ошибка - ") + e.what());
+    }
+}
+
+// ============================================================
+// HANDLE_REMOVE
+// ============================================================
+
+Result DataManager::handle_remove(const United& info) {
+    int removedCount = 0;
+    std::vector<std::string> removedNames;
+
+    // Если указано имя с подстрокой
+    if (info.has_subname && !info.subname.empty()) {
+        std::vector<int> groupsToCheck;
+        if (info.has_group_filter && !info.group_nums.empty()) {
+            groupsToCheck = info.group_nums;
+        } else {
+            for (int i = 0; i < MAX_GROUP; i++) {
+                if (listTable.get_list(i) != NULL) {
+                    groupsToCheck.push_back(i);
+                }
+            }
+        }
+
+        for (size_t i = 0; i < groupsToCheck.size(); i++) {
+            int groupNum = groupsToCheck[i];
+            std::vector<Student*> found = treeTable.searchBySubstringInGroup(groupNum, info.subname);
+
+            std::vector<Student*> toDelete;
+            for (size_t j = 0; j < found.size(); j++) {
+                if (info.has_rating_filter) {
+                    if (found[j]->rating >= info.min_rating &&
+                        found[j]->rating <= info.max_rating) {
+                        toDelete.push_back(found[j]);
+                    }
+                } else {
+                    toDelete.push_back(found[j]);
+                }
+            }
+
+            for (size_t j = 0; j < toDelete.size(); j++) {
+                removedNames.push_back(toDelete[j]->name);
+                removedCount++;
+            }
+
+            if (toDelete.size() > 0) {
+                treeTable.deleteBySubstringFromGroup(groupNum, info.subname, listTable);
+            }
+        }
+    }
+    // Если имя не указано, но есть группа или рейтинг
+    else if (info.has_group_filter || info.has_rating_filter) {
+        std::vector<int> groupsToCheck;
+        if (info.has_group_filter && !info.group_nums.empty()) {
+            groupsToCheck = info.group_nums;
+        } else {
+            for (int i = 0; i < MAX_GROUP; i++) {
+                if (listTable.get_list(i) != NULL) {
+                    groupsToCheck.push_back(i);
+                }
+            }
+        }
+
+        for (size_t i = 0; i < groupsToCheck.size(); i++) {
+            int groupNum = groupsToCheck[i];
+            GroupList* group = listTable.get_list(groupNum);
+            BTree* tree = treeTable.get_tree(groupNum);
+
+            if (group == NULL || tree == NULL) {
+                continue;
+            }
+
+            std::list<Student*>& students = group->getStudents();
+            std::vector<Student*> toDelete;
+
+            for (auto it = students.begin(); it != students.end(); ++it) {
+                Student* s = *it;
+                bool matches = true;
+
+                if (info.has_rating_filter) {
+                    if (s->rating < info.min_rating || s->rating > info.max_rating) {
+                        matches = false;
+                    }
+                }
+
+                if (matches) {
+                    toDelete.push_back(s);
+                }
+            }
+
+            for (size_t j = 0; j < toDelete.size(); j++) {
+                Student* s = toDelete[j];
+                removedNames.push_back(s->name);
+                tree->remove(s->name);
+                group->deleteStudentByName(s->name);
+                removedCount++;
+            }
+        }
+    }
+    else {
+        return Result(ERROR_INVALID_NAME, "REMOVE: не указаны условия для удаления");
+    }
+
+    if (removedCount == 0) {
+        std::string msg = "REMOVE: не найдено студентов для удаления\n";
+        if (info.has_subname) {
+            msg += "  Поиск по имени: \"" + info.subname + "\"\n";
+        }
+        if (info.has_group_filter && !info.group_nums.empty()) {
+            msg += "  Поиск по группам: " + std::to_string(info.group_nums[0]);
+            if (info.group_nums.size() > 1) {
+                msg += "-" + std::to_string(info.group_nums.back());
+            }
+            msg += "\n";
+        }
+        if (info.has_rating_filter) {
+            msg += "  Поиск по рейтингу: " + std::to_string(info.min_rating) +
+                   " - " + std::to_string(info.max_rating) + "\n";
+        }
+        return Result(ERROR_STUDENT_NOT_FOUND, msg);
+    }
+
+    std::string msg = "REMOVE: удалено студентов: " + std::to_string(removedCount);
+    if (removedCount <= 20) {
+        msg += "\nУдаленные студенты:";
+        for (size_t i = 0; i < removedNames.size(); i++) {
+            msg += "\n  - " + removedNames[i];
+        }
+    }
+
+    return Result(msg);
+}
+
+// ============================================================
+// РЕАЛИЗАЦИЯ Result::serialize()
+// ============================================================
+
+std::string Result::serialize() {
+    std::stringstream ss;
+
+    // Формат: код ошибки
+    ss << error_code << "\n";
+
+    if (error_code != SUCCESS) {
+        ss << error_message << "\n";
+        return ss.str();
+    }
+
+    if (!students.empty()) {
+        // Количество студентов
+        ss << students.size() << "\n";
+        for (size_t i = 0; i < students.size(); i++) {
+            ss << students[i]->name << ";"
+               << students[i]->group << ";"
+               << students[i]->rating << "\n";
+        }
+    } else if (!message.empty()) {
+        ss << message << "\n";
+    } else {
+        ss << "OK\n";
+    }
+
+    return ss.str();
 }

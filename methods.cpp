@@ -729,9 +729,10 @@ void DataManager::parseRating(const std::string& token, United& info) {
 // ============================================================
 
 
-Result DataManager::execute_request(const std::string& req) {
+Result DataManager::execute_request(const std::string& req, ClientSession* session) {
     United info;
-    std::stringstream ss(trim(req));
+    std::string trimmed_req = trim(req);
+    std::stringstream ss(trimmed_req);
     std::string token;
 
     // Считываем команду
@@ -739,6 +740,67 @@ Result DataManager::execute_request(const std::string& req) {
     std::string commandStr = token;
     std::transform(commandStr.begin(), commandStr.end(), commandStr.begin(), ::toupper);
 
+    // ============================================================
+    // 1. КОМАНДА PRINT (не меняет состояние БД)
+    // ============================================================
+    if (commandStr == "PRINT") {
+        // Проверяем, была ли успешная команда SELECT ранее
+        if (session == nullptr || !session->has_last_select || session->last_result == nullptr) {
+            return Result(ERROR_PRINT_DIDNOT_SELECT, 
+                "PRINT: нет данных для печати. Сначала выполните SELECT.");
+        }
+        
+        // Парсим список колонок, если он указан
+        std::vector<std::string> columns;
+        std::string columns_line;
+        
+        // Читаем остаток строки после PRINT
+        if (std::getline(ss, columns_line)) {
+            columns_line = trim(columns_line);
+            if (!columns_line.empty()) {
+                // Разбираем колонки, разделённые запятыми
+                std::stringstream col_ss(columns_line);
+                std::string col;
+                while (std::getline(col_ss, col, ',')) {
+                    col = trim(col);
+                    if (!col.empty()) {
+                        columns.push_back(col);
+                    }
+                }
+            }
+        }
+        
+        // Если колонки не указаны, выводим все стандартные
+        if (columns.empty()) {
+            columns.push_back("name");
+            columns.push_back("group");
+            columns.push_back("rating");
+        }
+        
+        // Валидация колонок
+        for (const auto& col : columns) {
+            if (col != "name" && col != "group" && col != "rating") {
+                return Result(ERROR_PRINT_INVALID_COLUMN, 
+                    "PRINT: неизвестная колонка '" + col + "'. Доступные колонки: name, group, rating");
+            }
+        }
+        
+        // Создаём результат с данными из последнего SELECT
+        Result result;
+        result.error_code = SUCCESS;
+        result.students = session->last_result->students;
+        result.columns = columns;
+        
+        return result;
+    }
+
+    // ============================================================
+    // 2. ПАРСИНГ ПАРАМЕТРОВ ДЛЯ ДРУГИХ КОМАНД
+    // ============================================================
+    
+    // Сбрасываем флаги для новой команды
+    info = United();  // сбрасываем в состояние по умолчанию
+    
     // Парсим параметры
     while (ss >> token) {
         if (!token.empty() && token.back() == ',') {
@@ -748,7 +810,7 @@ Result DataManager::execute_request(const std::string& req) {
         std::string lower = token;
         std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
 
-        // Обработка name (может содержать пробелы!)
+        // --- Обработка name (может содержать пробелы) ---
         if (lower == "name") {
             // Пропускаем "=" если есть
             ss >> token;
@@ -790,7 +852,7 @@ Result DataManager::execute_request(const std::string& req) {
                 info.subname = nameValue;
             }
         }
-        // Обработка group
+        // --- Обработка group ---
         else if (lower == "group") {
             ss >> token;
             if (token == "=") {
@@ -800,7 +862,7 @@ Result DataManager::execute_request(const std::string& req) {
             parseGroup(token, info);
             info.has_group_filter = true;
         }
-        // Обработка rating
+        // --- Обработка rating ---
         else if (lower == "rating") {
             ss >> token;
             if (token == "=") {
@@ -812,7 +874,12 @@ Result DataManager::execute_request(const std::string& req) {
         }
     }
 
-    // ВЫПОЛНЕНИЕ КОМАНДЫ
+    // ============================================================
+    // 3. ВЫПОЛНЕНИЕ КОМАНДЫ
+    // ============================================================
+    
+    Result result;
+    
     if (commandStr == "SELECT") {
         // Заполняем значения по умолчанию
         if (!info.has_group_filter) {
@@ -824,17 +891,37 @@ Result DataManager::execute_request(const std::string& req) {
             info.min_rating = 2.0;
             info.max_rating = 5.0;
         }
-        return handle_select(info);
+        
+        result = handle_select(info);
+        
+        // Сохраняем результат в сессии для последующего PRINT
+        if (session && result.is_success() && !result.students.empty()) {
+            // Удаляем старый результат, если был
+            if (session->last_result != nullptr) {
+                delete session->last_result;
+            }
+            session->last_result = new Result(result);
+            session->has_last_select = true;
+        } else if (session && result.is_success() && result.students.empty()) {
+            // SELECT вернул пустой результат — тоже запоминаем (чтобы PRINT показал "0 студентов")
+            if (session->last_result != nullptr) {
+                delete session->last_result;
+            }
+            session->last_result = new Result(result);
+            session->has_last_select = true;
+        }
     }
     else if (commandStr == "INSERT") {
-        return handle_insert(info);
+        result = handle_insert(info);
     }
     else if (commandStr == "REMOVE") {
-        return handle_remove(info);
+        result = handle_remove(info);
     }
     else {
-        return Result(ERROR_UNKNOWN_COMMAND, "Неизвестная команда: " + commandStr);
+        result = Result(ERROR_UNKNOWN_COMMAND, "Неизвестная команда: " + commandStr);
     }
+    
+    return result;
 }
 
 // ============================================================
@@ -1088,6 +1175,169 @@ std::string Result::serialize() {
     } else {
         ss << "OK\n";
     }
+    std::string ans = ss.str();
+    this->message_length = ans.length();
 
     return ss.str();
+}
+
+// ============================================================
+// ПАРСИНГ КОЛОНОК ДЛЯ PRINT
+// ============================================================
+
+void DataManager::parseColumns(const std::string& token, std::vector<std::string>& columns) {
+    std::stringstream ss(token);
+    std::string col;
+    
+    columns.clear();
+    
+    while (std::getline(ss, col, ',')) {
+        col = trim(col);
+        if (!col.empty()) {
+            columns.push_back(col);
+        }
+    }
+}
+
+// ============================================================
+// ФОРМАТИРОВАНИЕ RESULT В ТАБЛИЦУ
+// ============================================================
+
+std::string Result::format_as_table(const std::vector<std::string>& columns)  {
+    std::stringstream ss;
+    
+    if (error_code != SUCCESS) {
+        ss << "+-----------------------------+\n";
+        ss << "|           ОШИБКА            |\n";
+        ss << "+-----------------------------+\n";
+        ss << "| Код: " << std::setw(24) << error_code << "|\n";
+        ss << "| " << std::setw(28) << error_message.substr(0, 28) << "|\n";
+        ss << "+-----------------------------+\n";
+        return ss.str();
+    }
+    
+    if (!message.empty()) {
+        ss << "+-----------------------------+\n";
+        ss << "|         СООБЩЕНИЕ           |\n";
+        ss << "+-----------------------------+\n";
+        std::string msg = message.substr(0, 28);
+        ss << "| " << std::setw(28) << msg << "|\n";
+        ss << "+-----------------------------+\n";
+        return ss.str();
+    }
+    
+    if (students.empty()) {
+        ss << "+-----------------------------+\n";
+        ss << "|     РЕЗУЛЬТАТ ЗАПРОСА       |\n";
+        ss << "+-----------------------------+\n";
+        ss << "| Найдено студентов: " << std::setw(15) << "0" << "|\n";
+        ss << "+-----------------------------+\n";
+        return ss.str();
+    }
+    
+    // Вычисляем ширину колонок
+    std::vector<std::string> display_columns = columns;
+    if (display_columns.empty()) {
+        display_columns.push_back("name");
+        display_columns.push_back("group");
+        display_columns.push_back("rating");
+    }
+    
+    std::map<std::string, size_t> col_widths;
+    for (const auto& col : display_columns) {
+        size_t width = col.length();
+        for (Student* s : students) {
+            size_t val_len;
+            if (col == "name") val_len = s->name.length();
+            else if (col == "group") val_len = std::to_string(s->group).length();
+            else {
+                std::stringstream ss_val;
+                ss_val << std::fixed << std::setprecision(2) << s->rating;
+                val_len = ss_val.str().length();
+            }
+            if (val_len > width) width = val_len;
+        }
+        col_widths[col] = width;
+    }
+    
+    // Верхняя граница
+    ss << "+";
+    for (size_t i = 0; i < display_columns.size(); i++) {
+        ss << std::string(col_widths[display_columns[i]] + 2, '-');
+        if (i < display_columns.size() - 1) ss << "+";
+    }
+    ss << "+\n";
+    
+    // Заголовки
+    ss << "|";
+    for (const auto& col : display_columns) {
+        std::string upper = col;
+        std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+        ss << " " << std::left << std::setw(col_widths[col]) << upper << " |";
+    }
+    ss << "\n";
+    
+    // Разделитель
+    ss << "+";
+    for (size_t i = 0; i < display_columns.size(); i++) {
+        ss << std::string(col_widths[display_columns[i]] + 2, '-');
+        if (i < display_columns.size() - 1) ss << "+";
+    }
+    ss << "+\n";
+    
+    // Данные
+    for (Student* s : students) {
+        ss << "|";
+        for (const auto& col : display_columns) {
+            std::string value;
+            if (col == "name") value = s->name;
+            else if (col == "group") value = std::to_string(s->group);
+            else {
+                std::stringstream ss_val;
+                ss_val << std::fixed << std::setprecision(2) << s->rating;
+                value = ss_val.str();
+            }
+            ss << " " << std::left << std::setw(col_widths[col]) << value << " |";
+        }
+        ss << "\n";
+    }
+    
+    // Нижняя граница
+    ss << "+";
+    for (size_t i = 0; i < display_columns.size(); i++) {
+        ss << std::string(col_widths[display_columns[i]] + 2, '-');
+        if (i < display_columns.size() - 1) ss << "+";
+    }
+    ss << "+\n";
+    
+    ss << "Всего студентов: " << students.size() << "\n";
+
+    std::string ans = ss.str();
+    this->message_length = ans.length();
+    
+    return ss.str();
+}
+
+// ============================================================
+// HANDLE_PRINT
+// ============================================================
+
+Result DataManager::handle_print(const std::vector<std::string>& columns, const Result* last_result) {
+    if (last_result == nullptr || last_result->error_code != SUCCESS || last_result->students.empty()) {
+        return Result(ERROR_PRINT_DIDNOT_SELECT, "Нет результатов для печати. Сначала выполните SELECT.");
+    }
+    
+    // Проверяем валидность колонок
+    for (const auto& col : columns) {
+        if (col != "name" && col != "group" && col != "rating") {
+            return Result(ERROR_PRINT_INVALID_COLUMN, "Неизвестная колонка: " + col);
+        }
+    }
+    
+    Result result;
+    result.error_code = SUCCESS;
+    result.students = last_result->students;
+    result.columns = columns;
+    
+    return result;
 }

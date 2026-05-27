@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <vector>
 #include <algorithm>
+#include <map>
 
 const int T = 3;  // минимальная степень B-дерева
 const int MAX_GROUP = 1000; //максимальное число групп
@@ -144,7 +145,7 @@ struct United {
 };
 
 struct Result;
-
+struct ClientSession;
 // ========== ОБЪЕДИНЕННЫЙ МЕНЕДЖЕР ==========
 
 class DataManager {
@@ -156,16 +157,18 @@ private:
     std::string trim(const std::string& str);
     void parseGroup(const std::string& token, United& info);
     void parseRating(const std::string& token, United& info);
+    void parseColumns(const std::string& token, std::vector<std::string>& columns);
 
     Result handle_select(const United& info);
     Result handle_insert(const United& info);
     Result handle_remove(const United& info);
+    Result handle_print(const std::vector<std::string>& columns, const Result* last_result);
     
 public:
     DataManager(GroupHashTable& lists, TreeHashTable& trees);  // конструктор
     void load(const std::string& filename);                     // загрузка из файла
     void rewriteFile(const std::string& filename);              // Перезаписать файл текущими данными
-    Result execute_request(const std::string& req);
+    Result execute_request(const std::string& req, ClientSession* session = nullptr);
 };
 
 
@@ -184,48 +187,41 @@ enum ErrorCode {
     ERROR_GROUP_NOT_FOUND = 7,
     ERROR_INSERT_FAILED = 8,
     ERROR_REMOVE_FAILED = 9,
-    ERROR_INTERNAL = 99
+    ERROR_PRINT_DIDNOT_SELECT = 10,
+    ERROR_PRINT_INVALID_COLUMN = 11,
+    ERROR_INTERNAL = 99,
 };
 
 // ============================================================
 // СТРУКТУРА RESULT
 // ============================================================
 
-
 struct Result {
-    int error_code;                    // 0 = успех, иначе код ошибки
-    std::string error_message;         // Текст ошибки (если есть)
-    std::vector<Student*> students;    // Найденные студенты (для SELECT)
-    std::string message;               // Дополнительное сообщение (для INSERT/REMOVE)
+    int error_code;
+    std::string error_message;
+    std::vector<Student*> students;
+    std::string message;
+    std::vector<std::string> columns;  // запрошенные колонки для PRINT
+    int message_length;
 
-    // Конструкторы
     Result() : error_code(SUCCESS) {}
-
-    // Успешный результат с данными (для SELECT)
+    
     Result(const std::vector<Student*>& students)
         : error_code(SUCCESS), students(students) {}
-
-    // Успешный результат с сообщением (для INSERT/REMOVE)
+    
     Result(const std::string& msg)
         : error_code(SUCCESS), message(msg) {}
-
-    // Успешный результат с кодом и сообщением
+    
     Result(int code, const std::string& msg)
         : error_code(code), error_message(msg) {}
-
-    // Проверка на успех
+    
     bool is_success() const { return error_code == SUCCESS; }
-
-    // ============================================================
-    // СЕРИАЛИЗАЦИЯ ДЛЯ ОТПРАВКИ КЛИЕНТУ
-    // ============================================================
-
+    
     std::string serialize();
-
-    // ============================================================
-    // ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
-    // ============================================================
-
+    
+    // Форматирование в таблицу
+    std::string format_as_table(const std::vector<std::string>& columns) const;
+    
     std::string get_error_string() const {
         switch (error_code) {
             case SUCCESS: return "Успех";
@@ -236,10 +232,36 @@ struct Result {
             case ERROR_STUDENT_NOT_FOUND: return "Студент не найден";
             case ERROR_DUPLICATE_STUDENT: return "Дубликат студента";
             case ERROR_GROUP_NOT_FOUND: return "Группа не найдена";
+            case ERROR_INSERT_FAILED: return "Ошибка вставки";
+            case ERROR_REMOVE_FAILED: return "Ошибка удаления";
+            case ERROR_PRINT_DIDNOT_SELECT: return "Печать невозможна: сначала выполните SELECT";
+            case ERROR_PRINT_INVALID_COLUMN: return "Неверное имя колонки";
             case ERROR_INTERNAL: return "Внутренняя ошибка";
             default: return "Неизвестная ошибка";
         }
     }
-
 };
+
+// ========== СТРУКТУРА СЕССИИ КЛИЕНТА ==========
+
+struct ClientSession {
+    int fd;                         // файловый дескриптор сокета
+    Result* last_result;            // последний результат SELECT
+    bool has_last_select;           // был ли успешный SELECT
+    std::vector<std::string> last_columns; // последние запрошенные колонки
+
+    ClientSession(int fd) : fd(fd), last_result(nullptr), has_last_select(false) {}
+
+    ~ClientSession() {
+        if (last_result != nullptr) {
+            delete last_result;
+        }
+    }
+
+    // Запрещаем копирование
+    ClientSession(const ClientSession&) = delete;
+    ClientSession& operator=(const ClientSession&) = delete;
+};
+
+
 #endif

@@ -220,7 +220,7 @@ struct Result {
     std::string serialize();
     
     // Форматирование в таблицу
-    std::string format_as_table(const std::vector<std::string>& columns) const;
+    std::string format_as_table(const std::vector<std::string>& columns);
     
     std::string get_error_string() const {
         switch (error_code) {

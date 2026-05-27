@@ -703,6 +703,8 @@ void DataManager::parseGroup(const std::string& token, United& info) {
 
 void DataManager::parseRating(const std::string& token, United& info) {
     std::string ratingStr = token;
+
+    // Убираем "=" если есть
     size_t eqPos = ratingStr.find('=');
     if (eqPos != std::string::npos) {
         if (eqPos + 1 < ratingStr.length()) {
@@ -711,23 +713,33 @@ void DataManager::parseRating(const std::string& token, United& info) {
             return;
         }
     }
+
     ratingStr = trim(ratingStr);
     if (ratingStr.empty()) return;
-    
+
+    // Ищем тире (поддерживаем пробелы вокруг)
     size_t dashPos = ratingStr.find('-');
     if (dashPos != std::string::npos) {
-        info.min_rating = atof(trim(ratingStr.substr(0, dashPos)).c_str());
-        info.max_rating = atof(trim(ratingStr.substr(dashPos + 1)).c_str());
+        std::string startStr = trim(ratingStr.substr(0, dashPos));
+        std::string endStr = trim(ratingStr.substr(dashPos + 1));
+
+        if (startStr.empty() || endStr.empty()) return;
+
+        info.min_rating = atof(startStr.c_str());
+        info.max_rating = atof(endStr.c_str());
+        info.has_rating_filter = true;
+
+        // Отладка
+        std::cout << "DEBUG: min=" << info.min_rating << ", max=" << info.max_rating << std::endl;
     } else {
         info.min_rating = info.max_rating = atof(ratingStr.c_str());
+        info.has_rating_filter = true;
     }
-    info.has_rating_filter = true;
 }
 
 // ============================================================
 // СЕРВЕРНАЯ ВЕРСИЯ execute_request
 // ============================================================
-
 
 Result DataManager::execute_request(const std::string& req, ClientSession* session) {
     United info;
@@ -799,7 +811,7 @@ Result DataManager::execute_request(const std::string& req, ClientSession* sessi
     // ============================================================
     
     // Сбрасываем флаги для новой команды
-    info = United();  // сбрасываем в состояние по умолчанию
+    info = United();
     
     // Парсим параметры
     while (ss >> token) {
@@ -812,7 +824,6 @@ Result DataManager::execute_request(const std::string& req, ClientSession* sessi
 
         // --- Обработка name (может содержать пробелы) ---
         if (lower == "name") {
-            // Пропускаем "=" если есть
             ss >> token;
             if (token == "=") {
                 ss >> token;
@@ -868,8 +879,17 @@ Result DataManager::execute_request(const std::string& req, ClientSession* sessi
             if (token == "=") {
                 ss >> token;
             }
-            if (!token.empty() && token.back() == ',') token.pop_back();
-            parseRating(token, info);
+
+            std::string ratingValue = token;
+
+            // Проверяем, есть ли тире (следующий токен)
+            std::string next_token;
+            if (ss >> next_token && next_token == "-") {
+                ss >> next_token;
+                ratingValue += "-" + next_token;
+            }
+
+            parseRating(ratingValue, info);
             info.has_rating_filter = true;
         }
     }
@@ -895,15 +915,7 @@ Result DataManager::execute_request(const std::string& req, ClientSession* sessi
         result = handle_select(info);
         
         // Сохраняем результат в сессии для последующего PRINT
-        if (session && result.is_success() && !result.students.empty()) {
-            // Удаляем старый результат, если был
-            if (session->last_result != nullptr) {
-                delete session->last_result;
-            }
-            session->last_result = new Result(result);
-            session->has_last_select = true;
-        } else if (session && result.is_success() && result.students.empty()) {
-            // SELECT вернул пустой результат — тоже запоминаем (чтобы PRINT показал "0 студентов")
+        if (session && result.is_success()) {
             if (session->last_result != nullptr) {
                 delete session->last_result;
             }

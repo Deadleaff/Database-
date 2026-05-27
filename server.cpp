@@ -266,6 +266,7 @@ int main() {
                                 std::cout << "Запрос от клиента " << i << ": " << query << std::endl;
                                 
                                 ClientSession* session = sessions[i];
+                                std::cout << "session created" << std::endl;
                                 Result result = dm.execute_request(query, session);
                                 
                                 std::string response;

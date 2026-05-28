@@ -1174,15 +1174,15 @@ std::string Result::serialize() {
         return ss.str();
     }
 
-    if (!students.empty()) {
+    /*if (!students.empty()) {
         // Количество студентов
         ss << students.size() << "\n";
         for (size_t i = 0; i < students.size(); i++) {
             ss << students[i]->name << ";"
                << students[i]->group << ";"
                << students[i]->rating << "\n";
-        }
-    } else if (!message.empty()) {
+        }*/
+    /*} else */if (!message.empty()) {
         ss << message << "\n";
     } else {
         ss << "OK\n";

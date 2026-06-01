@@ -1,0 +1,23 @@
+INSERT name = Client2_A, group = 102, rating = 4.5
+INSERT name = Client2_B, group = 102, rating = 3.5
+INSERT name = Client2_C, group = 202, rating = 5.0
+INSERT name = Client2_D, group = 202, rating = 2.5
+SELECT
+SELECT group = 102
+SELECT rating = 4.0-5.0
+SELECT name = Client2_A
+PRINT name, group
+PRINT name, rating
+PRINT group, rating
+PRINT
+REMOVE name = Client2_B
+SELECT
+PRINT
+REMOVE group = 102
+SELECT
+PRINT
+REMOVE rating = 4.0-5.0
+SELECT
+SELECT
+PRINT
+q

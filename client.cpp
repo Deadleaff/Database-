@@ -91,12 +91,6 @@ int main() {
         
         msg_size = ntohl(net_msg_size);
         
-        if (msg_size == 0 || msg_size > 10 * 1024 * 1024) {
-            std::cerr << "Invalid message size: " << msg_size << std::endl;
-            char trash[4096];
-            while (recv(sockfd, trash, sizeof(trash), 0) > 0) {}
-            continue;
-        }
         
         std::vector<char> buf(msg_size + 1);
         size_t received = 0;

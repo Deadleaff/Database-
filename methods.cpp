@@ -729,8 +729,6 @@ void DataManager::parseRating(const std::string& token, United& info) {
         info.max_rating = atof(endStr.c_str());
         info.has_rating_filter = true;
 
-        // Отладка
-        std::cout << "DEBUG: min=" << info.min_rating << ", max=" << info.max_rating << std::endl;
     } else {
         info.min_rating = info.max_rating = atof(ratingStr.c_str());
         info.has_rating_filter = true;

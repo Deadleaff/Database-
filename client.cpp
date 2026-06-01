@@ -13,6 +13,7 @@
 
 #define PORT "3490"
 #define MAX_REQUEST_SIZE 4096
+#define SERVER_IP "127.0.0.1"
 
 void* get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
@@ -34,7 +35,7 @@ int main() {
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     
-    int status = getaddrinfo("127.0.0.1", PORT, &hints, &servinfo);
+    int status = getaddrinfo(SERVER_IP, PORT, &hints, &servinfo);
     if (status != 0) {
         std::cerr << "getaddrinfo: " << gai_strerror(status) << std::endl;
         return 1;
@@ -64,7 +65,6 @@ int main() {
     freeaddrinfo(servinfo);
     
     while (running) {
-        std::cout << "> ";
         std::cin.getline(req, MAX_REQUEST_SIZE);
         
         if (std::string(req) == "q") {

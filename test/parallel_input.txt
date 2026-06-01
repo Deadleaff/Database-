@@ -1,7 +1,0 @@
-./client < temp/input1.txt > temp/output1.txt
-./client < temp/input2.txt > temp/output2.txt
-./client < temp/input3.txt > temp/output3.txt
-./client < temp/input4.txt > temp/output4.txt
-./client < temp/input5.txt > temp/output5.txt
-./client < temp/input6.txt > temp/output6.txt
-./client < temp/input7.txt > temp/output7.txt

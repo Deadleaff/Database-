@@ -1217,22 +1217,16 @@ std::string Result::format_as_table(const std::vector<std::string>& columns)  {
     std::stringstream ss;
     
     if (error_code != SUCCESS) {
-        ss << "+-----------------------------+\n";
-        ss << "|           ОШИБКА            |\n";
-        ss << "+-----------------------------+\n";
-        ss << "| Код: " << std::setw(24) << error_code << "|\n";
-        ss << "| " << std::setw(28) << error_message.substr(0, 28) << "|\n";
-        ss << "+-----------------------------+\n";
+        ss << "           ОШИБКА            \n";
+        ss << " Код: " << std::setw(23) << error_code << "\n";
+        ss << " " << error_message << "\n";
         return ss.str();
     }
     
     if (!message.empty()) {
-        ss << "+-----------------------------+\n";
-        ss << "|         СООБЩЕНИЕ           |\n";
-        ss << "+-----------------------------+\n";
-        std::string msg = message.substr(0, 28);
-        ss << "| " << std::setw(28) << msg << "|\n";
-        ss << "+-----------------------------+\n";
+        ss << "         СООБЩЕНИЕ           \n";
+        std::string msg = message;
+        ss << " " << msg << "\n";
         return ss.str();
     }
     
@@ -1240,7 +1234,7 @@ std::string Result::format_as_table(const std::vector<std::string>& columns)  {
         ss << "+-----------------------------+\n";
         ss << "|     РЕЗУЛЬТАТ ЗАПРОСА       |\n";
         ss << "+-----------------------------+\n";
-        ss << "| Найдено студентов: " << std::setw(15) << "0" << "|\n";
+        ss << "| Найдено студентов: " << std::setw(9) << "0" << "|\n";
         ss << "+-----------------------------+\n";
         return ss.str();
     }

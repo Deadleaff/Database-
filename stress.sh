@@ -1,7 +1,7 @@
 #!/bin/bash
 
-for i in {1..7}; do
-> temp/output$i.txt
+for i in {1..9}; do
+: > temp/output$i.txt
     cat > temp/input$i.txt << EOF
 INSERT name = Client${i}_A, group = $((100 + i)), rating = 4.5
 INSERT name = Client${i}_B, group = $((100 + i)), rating = 3.5
@@ -29,6 +29,6 @@ q
 EOF
 done
 
-parallel -a test/parallel_input.txt
+parallel "echo '=== Задача {%} запущена ==='; ./client < temp/input{}.txt > temp/output{}.txt" ::: {1..9}
 
 echo Тесты пройдены
